@@ -5,7 +5,7 @@ A Direct Forecasting Paradigm for Multivariate Time-series Forecasting
 
 This is the flow chart of our proposed method, which contains four main stages. Follow this flow can realize a fluently reproduction.
 
-The correct flow should be: Preprocessing, IF, reference, Filtering, TRF, reference, and testing.
+The correct flow should be: Preprocessing, IF, inference, Filtering, TRF, inference, and testing.
 
 *IMPORTANT: DO use vLLM for inference, it is very important in accelerating.
 
