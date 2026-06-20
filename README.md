@@ -9,8 +9,6 @@ The correct flow should be: Preprocessing, IF, reference, Filtering, TRF, refere
 
 *IMPORTANT: DO use vLLM for inference, it is very important in accelerating.
 
-When doing reproduction, dont forget to enter your own file path.
-
 In the "preprocessing" file, FLOAT_FORMAT = "%.3f"  # this setting can be change based on the GPU memory usage, in our testing, 3, 4, and 5 do not show significant differences on results, but show differences on GPU memory usages.
 
 If some unforeseen problems are encountered, you can try reverting to SWIFT version v3.9.
