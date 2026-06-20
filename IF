@@ -1,0 +1,42 @@
+# recommend
+pip install 'ms-swift' -U
+# Install additional Megatron dependencies
+pip install 'ms-swift[megatron]' -U
+# Install additional evaluation dependencies
+pip install 'ms-swift[eval]' -U
+# Full capabilities
+pip install 'ms-swift[all]' -U
+
+# Using uv
+pip install uv
+uv pip install 'ms-swift' --torch-backend=auto
+
+# Linux
+CUDA_VISIBLE_DEVICES=0 \
+swift sft \
+    --model Qwen/Qwen2.5-0.5B-Instruct \
+    --train_type lora \
+    --dataset '(enter your path file here)' \
+    --torch_dtype bfloat16 \
+    --num_train_epochs 10 \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 2 \
+    --learning_rate 1e-4 \
+    --lora_rank 8 \
+    --lora_alpha 32 \
+    --target_modules all-linear \
+    --gradient_accumulation_steps 2 \
+    --eval_steps 200 (deletable) \
+    --save_steps 200 (changeable)\
+    --save_total_limit 2 (changeable, if you want to track more trainging information)\
+    --logging_steps 5 \
+    --max_length 4096 (dont forget to change this base on the seen maxium length, or you can set a very long value, such as 296000, to make sure it suits all forecasting horizons) \
+    --output_dir output (changeable, based on where you want to save the training results)\
+    --system 'You are a helpful time-series forecasting assistant' \
+    --warmup_ratio 0.05 \
+    --dataloader_num_workers 4 \
+    --model_author swift \
+    --model_name swift-robot
+
+# If you can only train on Windows, try this, it is also useable
+set CUDA_VISIBLE_DEVICES=0 && swift sft --model "models/Qwen2.5-0.5B-Instruct" --train_type lora --dataset "(enter your path file here)" --torch_dtype bfloat16 --num_train_epochs 10 --per_device_train_batch_size 2 --per_device_eval_batch_size 2 --learning_rate 1e-4 --lora_rank 8 --lora_alpha 32 --target_modules all-linear --gradient_accumulation_steps 2 --eval_steps 200 --save_steps 200 --save_total_limit 2 --logging_steps 5 --max_length 4096 --output_dir "(enter your output location here)" --system "You are a helpful time-series forecasting assistant"
