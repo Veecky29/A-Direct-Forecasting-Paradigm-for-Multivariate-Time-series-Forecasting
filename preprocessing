@@ -1,0 +1,136 @@
+
+import json
+import os
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+# ================== configurations ==================
+XLSX_PATH = ()  # enter your file path here
+SHEET = ()
+TIME_COL = "()"
+TARGET_COL = "()"
+FEATURE_COLS = ["()"]
+
+LOOKBACK = ()    # look back window
+HORIZON = ()  # forecasting horizons
+STRIDE = 1       
+
+OUT_PREFIX = () # enter your output file path here
+TRAIN_RATIO = 0.8  
+
+FLOAT_FORMAT = "%.3f"  # this setting can be change based on the GPU memory usage, in our testing, 3, 4, and 5 do not show significant differences on results, but show differences on GPU memory usages
+# ==========================================
+
+def format_float(v, fmt="%.3f"):
+    try:
+        return fmt % float(v)
+    except:
+        return str(v)
+
+def build_samples_from_revin_xlsx(df, time_col, feature_cols, target_col,
+                                  lookback=(), horizon=(), stride=1, fmt="%.3f"):
+    samples = []
+    
+    df = df.copy()
+    df[time_col] = pd.to_datetime(df[time_col])
+    df = df.sort_values(time_col).reset_index(drop=True)
+    
+    times = df[time_col].values
+    X_all = df[feature_cols].astype(float).reset_index(drop=True)
+    
+    n = len(df)
+    max_start = n - lookback - horizon
+    
+    if max_start < 0:
+        return samples
+    
+    # sliding window generates samples
+    for start in range(0, max_start + 1, stride):
+        end = start + lookback
+        fut_end = end + horizon
+        
+        win_times = [pd.Timestamp(t).strftime("%Y-%m-%d %H:%M:%S") for t in times[start:end]]
+        win_vals = X_all.iloc[start:end]
+        
+        header = ["time"] + feature_cols
+        lines = [" ".join(header)] 
+        for i, ts in enumerate(win_times):
+            row_vals = [format_float(win_vals.iloc[i][c], fmt) for c in feature_cols]
+            lines.append(" ".join([ts] + row_vals))
+        table_str = "\n".join(lines)
+        
+        y_future = X_all[target_col].iloc[end:fut_end].values.astype(float)
+        y_response = " ".join(format_float(v, fmt) for v in y_future.tolist())
+        
+        tgt_start_ts = pd.Timestamp(times[end]).strftime("%Y-%m-%d %H:%M:%S")
+        tgt_end_ts = pd.Timestamp(times[fut_end-1]).strftime("%Y-%m-%d %H:%M:%S")
+        
+        # === prompt engineering ===
+        system_prompt = (
+            "You are a time-series forecasting assistant. Based on the context provided by the user, "
+            "output only the prediction results without explanation. "
+            "Requirements: Output only a sequence of real numbers, separated by spaces, and keep three decimal places. "
+            "No other text or punctuation is allowed."
+        )
+        
+        user_prompt = (
+            f"Context (Normalized data):\n{table_str}\n\n"
+            f"Predict the {target_col} values for the next {horizon} steps from {tgt_start_ts} to {tgt_end_ts}."
+        )
+
+        sample = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": y_response}
+            ],
+            "metadata": {
+                "window_start": win_times[0],
+                "window_end": win_times[-1],
+                "predict_start": tgt_start_ts,
+                "predict_end": tgt_end_ts,
+                "target_col": target_col
+            }
+        }
+        
+        samples.append(sample)
+    
+    return samples
+
+def main():
+
+    if not os.path.exists(XLSX_PATH):
+        return
+
+    df = pd.read_excel(XLSX_PATH, sheet_name=SHEET)
+    
+        samples = build_samples_from_revin_xlsx(
+        df=df,
+        time_col=TIME_COL,
+        feature_cols=FEATURE_COLS,
+        target_col=TARGET_COL,
+        lookback=LOOKBACK,
+        horizon=HORIZON,
+        stride=STRIDE,
+        fmt=FLOAT_FORMAT
+    )
+    
+    n_total = len(samples)
+    if n_total == 0: return
+    
+    n_train = int(n_total * TRAIN_RATIO)
+    train_samples = samples[:n_train]
+    test_samples = samples[n_train:]
+    
+    out_train = f"{OUT_PREFIX}_train_simple.jsonl"
+    out_test = f"{OUT_PREFIX}_test_simple.jsonl"
+    Path(out_train).parent.mkdir(parents=True, exist_ok=True)
+    
+    for path, data in [(out_train, train_samples), (out_test, test_samples)]:
+        with open(path, "w", encoding="utf-8") as f:
+            for s in data:
+                f.write(json.dumps(s, ensure_ascii=False) + "\n")
+
+if __name__ == "__main__":
+    main()
