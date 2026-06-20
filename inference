@@ -1,0 +1,7 @@
+CUDA_VISIBLE_DEVICES=0 swift infer \
+    --model Qwen/Qwen2.5-0.5B-Instruct \
+    --adapters /use check point here, no need to combine adapter with LLM backbone \
+    --stream true \
+    --infer_backend vllm \
+    --val_dataset /enter tesing set \
+    --max_new_tokens
