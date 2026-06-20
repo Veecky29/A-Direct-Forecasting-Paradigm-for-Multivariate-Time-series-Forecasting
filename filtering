@@ -1,0 +1,95 @@
+# === configurations ===
+INPUT_PATH   = 
+OUTPUT_PATH  = 
+REQUIRED_LEN = 96, 192, 336, 720
+THRESHOLD    = 0.2
+RESPONSE_KEY = "response"   
+LABEL_KEY    = "labels"     
+# =========================
+
+import json
+import re
+import ast
+import numpy as np
+
+def clean_and_parse_array(text):
+    if isinstance(text, (list, tuple, np.ndarray)):
+        try:
+            return np.array(text, dtype=float)
+        except Exception:
+            return np.array([])
+    if not isinstance(text, str):
+        return np.array([])
+
+    try:
+        arr = ast.literal_eval(text)
+        return np.array(arr, dtype=float)
+    except Exception:
+        pass
+
+    try:
+        cleaned = re.sub(r'[^\d\.\-\,\s\[\]\nEe+]', ' ', text)
+        cleaned = cleaned.replace('\n', ' ').strip('[]')
+        nums = []
+        for tok in cleaned.replace(',', ' ').split():
+            try:
+                nums.append(float(tok))
+            except Exception:
+                continue
+        return np.array(nums, dtype=float)
+    except Exception:
+        return np.array([])
+
+def compute_mse(yhat, y):
+    if yhat.size == 0 or y.size == 0:
+        return None
+    if yhat.shape != y.shape:
+        return None
+    return float(np.mean((yhat - y) ** 2))
+
+def main():
+    n_total = 0
+    n_len_ok = 0
+    n_bad = 0
+    bad_mses = []
+
+    with open(INPUT_PATH, "r", encoding="utf-8") as fin, \
+         open(OUTPUT_PATH, "w", encoding="utf-8") as fout:
+        for line in fin:
+            line = line.strip()
+            if not line:
+                continue
+            n_total += 1
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+
+            resp = clean_and_parse_array(rec.get(RESPONSE_KEY, ""))
+            lab  = clean_and_parse_array(rec.get(LABEL_KEY, ""))
+
+            if len(resp) != REQUIRED_LEN or len(lab) != REQUIRED_LEN:
+                continue
+            n_len_ok += 1
+
+            mse = compute_mse(resp, lab)
+            if mse is None:
+                continue
+
+            if mse > THRESHOLD:
+                n_bad += 1
+                rec_out = dict(rec)
+                rec_out["mse"] = mse
+                fout.write(json.dumps(rec_out, ensure_ascii=False) + "\n")
+                bad_mses.append(mse)
+
+    print(f"input instances: {n_total}")
+    print(f"Length aligned(={REQUIRED_LEN})instances: {n_len_ok}")
+    print(f"MSE > {THRESHOLD} instances: {n_bad}")
+    if bad_mses:
+        print(f"badcase MSE mean: {np.mean(bad_mses):.6f} | "
+              f"min: {np.min(bad_mses):.6f} | max: {np.max(bad_mses):.6f}")
+    print(f"output to: {OUTPUT_PATH}")
+
+if __name__ == "__main__":
+    main()
