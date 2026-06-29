@@ -10,95 +10,104 @@ def extract_array(text: str):
     return json.loads(m.group(0))
 
 def get_ground_truth(solution, kwargs):
-
     if solution is not None:
         return solution  
-
     for key in ['labels', 'solution', 'label', 'ground_truth', 'gt', 'answer']:
         if key in kwargs and kwargs[key] is not None:
             return kwargs[key]
     return None
 
 class TSFormatORM(ORM):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.w_f = () #Format weight
+
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         rewards = []
         for comp in completions:
             try:
                 y_pred = extract_array(comp)
                 if isinstance(y_pred, list) and len(y_pred) > 0:
-                    rewards.append(0.0)  
+                    rewards.append(0.0 * self.w_f)  
                 else:
-                    rewards.append(-5.0)  
+                    rewards.append(-10.0 * self.w_f) 
             except Exception:
-                rewards.append(-5.0)  
+                rewards.append(-10.0 * self.w_f)     
         return rewards
 
 class TSLengthORM(ORM):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.w_l = () #Length weight
+
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         ground_truth = get_ground_truth(solution, kwargs)
+        
         if ground_truth is None:
-            rewards = []
-            for comp in completions:
-                try:
-                    y_pred = extract_array(comp)
-                    if len(y_pred) > 0:
-                        rewards.append(0.0) 
-                    else:
-                        rewards.append(-5.0)
-                except Exception:
-                    rewards.append(-5.0)
-            return rewards
+            return [-2.0 * self.w_l] * len(completions)
         
         rewards = []
         for comp, gt in zip(completions, ground_truth):
             try:
+                y_pred = extract_array(comp)
                 if isinstance(gt, str):
                     y_true = json.loads(gt)
                 else:
                     y_true = gt
-                
-                y_pred = extract_array(comp)
-                
+                    
                 len_true = len(y_true)
                 len_pred = len(y_pred)
                 
+                if len_true == 0:
+                    rewards.append(-2.0 * self.w_l)
+                    continue
+                
                 if len_pred >= len_true:
-                    rewards.append(1.0)
+                    raw_reward = 1.0 - (len_pred / len_true)
+                    rewards.append(max(raw_reward, -2.0) * self.w_l) 
                 else:
-                    rewards.append(1.0 * len_pred / len_true - 1.0)
+                    rewards.append(((len_pred / len_true) - 1.0) * self.w_l)
                     
             except Exception:
-                rewards.append(-5.0)
+                rewards.append(-2.0 * self.w_l)
         
         return rewards
 
 class TSMSEORM(ORM):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.w_m = () #MER weight
+
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         ground_truth = get_ground_truth(solution, kwargs)
         if ground_truth is None:
-            return [-10.0] * len(completions)
+            return [-10.0 * self.w_m] * len(completions)
+            
         rewards = []
         for comp, gt in zip(completions, ground_truth):
             try:
+                y_pred = extract_array(comp)
                 if isinstance(gt, str):
                     y_true = json.loads(gt)
                 else:
                     y_true = gt
-                y_pred = extract_array(comp)
+
                 if (not isinstance(y_true, list) or
                     not isinstance(y_pred, list) or
                     len(y_true) == 0 or
                     len(y_true) != len(y_pred)):
-                    rewards.append(-10.0)
+                    rewards.append(-10.0 * self.w_m) 
                     continue
+                
                 se = 0.0
                 for p, t in zip(y_pred, y_true):
                     se += (float(p) - float(t)) ** 2
                 mse = se / len(y_true)
-
-                rewards.append(-mse)
+                
+                rewards.append(max(-mse, -10.0) * self.w_m)
+                
             except Exception:
-                rewards.append(-10.0)
+                rewards.append(-10.0 * self.w_m)
 
         return rewards
 
