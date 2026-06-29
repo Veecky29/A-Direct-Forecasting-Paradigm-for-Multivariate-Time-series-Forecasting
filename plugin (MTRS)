@@ -9,6 +9,9 @@ def extract_array(text: str):
         raise ValueError("No array in text")
     return json.loads(m.group(0))
 
+def has_natural_language(text: str) -> bool:
+    return bool(re.search(r'[\u4e00-\u9fa5]', text))
+
 def get_ground_truth(solution, kwargs):
     if solution is not None:
         return solution  
@@ -20,31 +23,34 @@ def get_ground_truth(solution, kwargs):
 class TSFormatORM(ORM):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.w_f = () #Format weight
+        self.w_f = ()
 
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         rewards = []
         for comp in completions:
             try:
+                if has_natural_language(comp):
+                    rewards.append(-5.0 * self.w_f)
+                    continue
+                
                 y_pred = extract_array(comp)
                 if isinstance(y_pred, list) and len(y_pred) > 0:
-                    rewards.append(0.0 * self.w_f)  
+                    rewards.append(0.0 * self.w_f)
                 else:
-                    rewards.append(-10.0 * self.w_f) 
+                    rewards.append(-5.0 * self.w_f)
             except Exception:
-                rewards.append(-10.0 * self.w_f)     
+                rewards.append(-5.0 * self.w_f)     
         return rewards
 
 class TSLengthORM(ORM):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.w_l = () #Length weight
+        self.w_l = ()
 
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         ground_truth = get_ground_truth(solution, kwargs)
-        
         if ground_truth is None:
-            return [-2.0 * self.w_l] * len(completions)
+            return [0.0] * len(completions)
         
         rewards = []
         for comp, gt in zip(completions, ground_truth):
@@ -59,29 +65,26 @@ class TSLengthORM(ORM):
                 len_pred = len(y_pred)
                 
                 if len_true == 0:
-                    rewards.append(-2.0 * self.w_l)
+                    rewards.append(0.0)
                     continue
-                
+
                 if len_pred >= len_true:
-                    raw_reward = 1.0 - (len_pred / len_true)
-                    rewards.append(max(raw_reward, -2.0) * self.w_l) 
+                    rewards.append((1.0 - (len_pred / len_true)) * self.w_l) 
                 else:
-                    rewards.append(((len_pred / len_true) - 1.0) * self.w_l)
-                    
+                    rewards.append(((len_pred / len_true) - 1.0) * self.w_l)               
             except Exception:
-                rewards.append(-2.0 * self.w_l)
-        
+                rewards.append(0.0)        
         return rewards
 
 class TSMSEORM(ORM):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.w_m = () #MER weight
+        self.w_m = ()
 
     def __call__(self, completions, solution=None, **kwargs) -> List[float]:
         ground_truth = get_ground_truth(solution, kwargs)
         if ground_truth is None:
-            return [-10.0 * self.w_m] * len(completions)
+            return [0.0] * len(completions)
             
         rewards = []
         for comp, gt in zip(completions, ground_truth):
@@ -91,12 +94,12 @@ class TSMSEORM(ORM):
                     y_true = json.loads(gt)
                 else:
                     y_true = gt
-
+                
                 if (not isinstance(y_true, list) or
                     not isinstance(y_pred, list) or
-                    len(y_true) == 0 or
-                    len(y_true) != len(y_pred)):
-                    rewards.append(-10.0 * self.w_m) 
+                    len(y_true) != len(y_pred) or
+                    len(y_true) == 0):
+                    rewards.append(0.0)
                     continue
                 
                 se = 0.0
@@ -104,11 +107,10 @@ class TSMSEORM(ORM):
                     se += (float(p) - float(t)) ** 2
                 mse = se / len(y_true)
                 
-                rewards.append(max(-mse, -10.0) * self.w_m)
+                rewards.append(-mse * self.w_m)
                 
             except Exception:
-                rewards.append(-10.0 * self.w_m)
-
+                rewards.append(0.0)
         return rewards
 
 orms["ts_format"] = TSFormatORM
