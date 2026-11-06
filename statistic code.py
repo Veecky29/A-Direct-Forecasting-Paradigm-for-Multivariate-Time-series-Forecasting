@@ -1,10 +1,3 @@
-"""Recompute descriptive ranks directly from the printed MSE/MAE in Tables 4 and 5.
-
-Usage: python reviewer7_rank_from_manuscript.py 'Manuscript (clean).docx' [outdir]
-Dependencies: python-docx (only for reading manuscript); standard library otherwise.
-There are NO hypothesis tests and NO new forecasting experiments in this script.
-Ranks: ascending metric, tie-average (midrank) at the manuscript's printed precision.
-"""
 from __future__ import annotations
 import csv
 from collections import defaultdict
@@ -81,10 +74,7 @@ def build(manuscript: Path, outdir: Path):
             summary.append([dataset]+[averages[m] for m in methods])
         write_csv(outdir / f'Table7_{metric}_MeanRanks.csv',summary)
         summaries[metric]=summary
-
-    readme = '''REVIEWER #5 / COMMENT #7 -- Descriptive ranking (NO statistical hypothesis tests)\n\nSource: numeric values printed in Tables 4-5 of the supplied manuscript.\nThis script extracts the 2×12 row main benchmark tables (96/192 and 336/720) using their headers and shape.\nMSE and MAE are ranked separately for each dataset × horizon.\nRank 1 is lowest printed MSE/MAE. Equal printed values receive average (mid-)ranks.\nDataset mean rank is arithmetic mean of 4 horizon-specific ranks.\nRankMatrix_MSE_24tasks.csv and RankMatrix_MAE_24tasks.csv each have 24 rows × 10 model rank columns.\nTable7_MSE_MeanRanks.csv and Table7_MAE_MeanRanks.csv are the two manuscript panels.\n\nIMPORTANT: These numbers match AS-SUBMITTED Tables 4-5, including potential baseline transcription errors.\nRecompute on the FINAL CORRECTED manuscript before submission (Reviewer comments #12/13).\nThese ranks are descriptive within indicative cross-study comparisons, NOT statistical significance evidence.\nNo Wilcoxon, Friedman, Holm or Bonferroni operations are performed.\n\nRun: python reviewer7_rank_from_manuscript.py "Manuscript (clean).docx" output_folder\n'''
-    (outdir/'README.txt').write_text(readme,encoding='utf-8')
-    return methods,summaries,per_task
+        
 
 if __name__=='__main__':
     manuscript=Path(sys.argv[1] if len(sys.argv)>1 else 'Manuscript (clean).docx')
